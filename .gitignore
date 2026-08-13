@@ -23,4 +23,4 @@ dist-ssr
 *.sln
 *.sw?
 
-.src/Server/Stores/api_keys.json
+/.env

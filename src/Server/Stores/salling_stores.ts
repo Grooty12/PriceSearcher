@@ -214,8 +214,8 @@ export class SallingLib {
           const imageURL = hit.images[0];
           const brand = hit.brand;
           const standardUnit = storeData[0].unitsOfMeasurePriceUnit;
-          const storeProductId = hit.article;
-          addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, storeProductId, price, [""]);
+          const priceStandardUnit = storeData[0]['unitsOfMeasurePrice'] / 1000;
+          addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, price, priceStandardUnit, [""]);
       }
   }
 

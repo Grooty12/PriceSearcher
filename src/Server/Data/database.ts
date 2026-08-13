@@ -25,16 +25,6 @@ db.exec(`
                                               parent_id INTEGER REFERENCES categories(id)
         );
 
-    CREATE TABLE IF NOT EXISTS product_stores (
-                                                  product_id INTEGER REFERENCES products(id),
-        store_id INTEGER REFERENCES stores(id),
-        store_product_id TEXT,
-        current_price REAL,
-        currency TEXT DEFAULT 'DKK',
-        last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (product_id, store_id)
-        );
-
     CREATE TABLE IF NOT EXISTS prices (
                                           id INTEGER PRIMARY KEY AUTOINCREMENT,
                                           product_id INTEGER REFERENCES products(id),
@@ -78,7 +68,7 @@ db.exec(`
     parent_id?: number;
   }
 
-  interface Price {
+export interface Price {
     id: number;
     product_id: number;
     store_id: number;
@@ -88,14 +78,6 @@ db.exec(`
     recorded_at: string;
   }
 
-  interface ProductStore {
-    product_id: number;
-    store_id: number;
-    store_product_id?: string;
-    current_price?: number;
-    currency: string;
-    last_updated: string;
-  }
 
   // Prepared statements
   const insertStore = db.prepare<string, { lastInsertRowid: number }>(
@@ -116,14 +98,6 @@ db.exec(`
                                 image_url = excluded.image_url
 `);
 
-const insertProductStore = db.prepare(`
-    INSERT INTO product_stores (product_id, store_id, store_product_id, current_price)
-    VALUES (?, ?, ?, ?)
-        ON CONFLICT(product_id, store_id) DO UPDATE SET
-        current_price = excluded.current_price,
-                                                 last_updated = CURRENT_TIMESTAMP
-`);
-
 const insertPrice = db.prepare(`
     INSERT INTO prices (product_id, store_id, price, price_per_standard_quantity)
     VALUES (?, ?, ?, ?)
@@ -136,6 +110,7 @@ const insertProductCategory = db.prepare(
 // Query statements
 export const getProductByEan = db.prepare<string, ProductInterface>('SELECT * FROM products WHERE ean = ?');
 
+export const getProductPriceById = db.prepare<string, Price>('SELECT * FROM prices WHERE id = ?');
 
 // Insert helpers
 function getOrCreateStore(name: string): number {
@@ -154,29 +129,6 @@ function getOrCreateCategory(name: string): number {
   const category = db.prepare<string, Category>('SELECT id FROM categories WHERE name = ?').get(name);
   return category!.id;
 }
-
-function upsertProduct(product: Omit<ProductInterface, 'id' | 'created_at'>): number {
-  const result = insertProduct.run(
-      product.ean,
-      product.name,
-      product.brand,
-      product.image_url,
-      product.quantity_value,
-      product.quantity_unit,
-      product.standard_quantity_unit
-  );
-  return result.lastInsertRowid;
-}
-
-function linkProductToStore(
-    productId: number,
-    storeId: number,
-    storeProductId: string | undefined,
-    currentPrice: number
-): void {
-  insertProductStore.run(productId, storeId, storeProductId, currentPrice);
-}
-
 function logPrice(
     productId: number,
     storeId: number,
@@ -199,8 +151,8 @@ export const addProductWithPrice = db.transaction((
     quantityUnit: string,
     standardUnit: string,
     storeName: string,
-    storeProductId: string,
     price: number,
+    priceStandardUnit: number,
     categories: string[]
 ) => {
     insertProduct.run(
@@ -210,8 +162,7 @@ export const addProductWithPrice = db.transaction((
     if (!product) throw new Error('Product upsert failed');
     const productId = product.id;
     const storeId = getOrCreateStore(storeName);
-    insertProductStore.run(productId, storeId, storeProductId, price);
-    insertPrice.run(productId, storeId, price, price);
+    insertPrice.run(productId, storeId, price, priceStandardUnit);
 
     for (const category of categories) {
         const categoryId = getOrCreateCategory(category);
