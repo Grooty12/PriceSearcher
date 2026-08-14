@@ -7,10 +7,10 @@ import {Fotex} from './Stores/fotex.ts'
 import {Meny} from "./Stores/meny.ts";
 
 import {
-    getProductByEan,
+    findProductByEAN,
     searchProductsByName,
-    type ProductInterface,
-    type Price,
+    type ProductSearchResult,
+    type ProductWithMetadata
 } from './Data/database.ts'
 
 const firstRun = false;
@@ -40,12 +40,12 @@ interface SearchRequest extends Request<{ ean: string; }> {}
 interface SearchRequestName extends Request<{ name: string; }> {}
 
 // Get product by EAN
-app.get('/api/products/:ean', (req: SearchRequest, res: Response<ProductInterface>) => {
-    const product = getProductByEan.get(req.params.ean);
+app.get('/api/products/:ean', (req: SearchRequest, res: Response<ProductWithMetadata>) => {
+    const product = findProductByEAN(req.params.ean);
     res.json(product);
 });
 
-app.get('/api/productsName/:name', (req: SearchRequestName, res: Response<ProductInterface[]>) => {
+app.get('/api/productsName/:name', (req: SearchRequestName, res: Response<ProductSearchResult>) => {
     const products = searchProductsByName(req.params.name);
     res.json(products)
 })

@@ -57,6 +57,38 @@ db.exec(`
     created_at: string;
   }
 
+  interface ProductSearchResultPrices {
+      date: string;
+      price: number;
+      price_standard_unit: number;
+      currency: string;
+  }
+
+  interface ProductSearchResultStores {
+      id: number;
+      name: string;
+      prices: ProductSearchResultPrices[];
+  }
+
+  export interface ProductWithMetadata {
+      id: number;
+      ean: string;
+      name: string;
+      brand?: string;
+      image_url?: string;
+      quantity_value?: number;
+      quantity_unit?: string;
+      standard_quantity_unit?: string;
+      categories: string[];
+      stores: ProductSearchResultStores[];
+  }
+
+  export interface ProductSearchResult {
+      nResults: number;
+      nbResults: number;
+      results: ProductWithMetadata[];
+  }
+
   interface Store {
     id: number;
     name: string;
@@ -109,12 +141,24 @@ const insertProductCategory = db.prepare(
     'INSERT OR IGNORE INTO product_categories (product_id, category_id) VALUES (?, ?)'
 );
 
-// Query statements
+const countProducts = db.prepare<[], number>('SELECT COUNT(*) FROM products').pluck();
+
+const getAllStores = db.prepare<[], Store>('SELECT * FROM stores');
+
 export const getProductByEan = db.prepare<string, ProductInterface>('SELECT * FROM products WHERE ean = ?');
 
 export const getProductPriceById = db.prepare<[number, number], Price>('SELECT * FROM prices WHERE product_id = ? LIMIT ?');
 
 export const getProductPriceByIdAndStore = db.prepare<[number, number, number], Price>('SELECT * FROM prices WHERE id = ? AND store_id = ? LIMIT ?');
+
+const getProductSearchResultPricesByIdAndStore = db.prepare<[number, number, number], ProductSearchResultPrices[]>(`
+    SELECT 
+        price, 
+        price_per_standard_quantity AS price_standard_unit, 
+        currency,
+        recorded_at AS date
+    FROM prices WHERE product_id = ? AND store_id = ? LIMIT ?
+`)
 
 export const getProductsByName = db.prepare<[string, number], ProductInterface>(`
     SELECT * FROM products
@@ -139,6 +183,10 @@ function getStore(name: string): number {
         throw new Error(`Store not found: ${name}`);
     }
     return row.id;
+}
+
+function getStores(): Store[] {
+    return getAllStores.all();
 }
 
 function getOrCreateCategory(name: string): number {
@@ -186,46 +234,67 @@ export const addProductWithPrice = db.transaction((
     return productId;
 });
 
-export const updateProductPrice = db.transaction((
-    ean: string,
-    storeName: string,
-    price: number,
-    standardUnitPrice: number
-)=> {
+export function updateProductPrice(ean: string, storeName: string, price: number, standardUnitPrice: number) {
     const product = getProductByEan.get(ean);
     if (product) {
         const productId = product.id;
-        const storeId = getOrCreateStore(storeName);
-        logPrice(productId, storeId, price, standardUnitPrice);
-    }
-
-})
-
-export function getProductPrices(productId: number, storeId?: number, limit: number = 1): Price[] | undefined {
-    if (storeId === undefined || storeId === null) {
-        return getProductPriceById.all(productId, limit);
-    } else {
-        return getProductPriceByIdAndStore.all(productId, storeId, limit);
+        const storeId = getStore(storeName);
+        const oldPrice = getProductSearchResultPricesByIdAndStore.get(productId, storeId, 1)
+        if (oldPrice === undefined || oldPrice[0] === undefined || oldPrice[0].price !== price) {
+            logPrice(productId, storeId, price, standardUnitPrice);
+        }
     }
 }
 
-export function searchProductsByName(name: string, stores?: string[], limit: number = 10) {
+export function searchProductsByName(name: string, limit: number = 10, pricesLimit: number = 50):ProductSearchResult | undefined {
     const products = getProductsByName.all(name, limit);
-    if (stores === undefined || stores.length === 0) {
-        return products;
-    }
-    const results: ProductInterface[] = []
-    const storesArray = stores.map(name => getStore(name));
-    for (const product of products) {
-        for (const store of storesArray) {
-            const latestProductPriceForStore = getProductPrices(product.id, store);
-            if (latestProductPriceForStore === undefined) {
-                continue;
-            } else {
-                results.push(product);
-                break;
-            }
+    return buildSearchResultsJSON(products, pricesLimit);
+}
+
+function getProductMetadata(product:ProductInterface, pricesLimit: number = 50) {
+    const productStores: ProductSearchResultStores[] = [];
+    for (const store of getStores()) {
+        const productStorePrices: ProductSearchResultPrices[] | undefined = getProductSearchResultPricesByIdAndStore.get(product.id, store.id, pricesLimit)
+        if (productStorePrices !== undefined) {
+            productStores.push({
+                id: store.id,
+                name: store.name,
+                prices: productStorePrices,
+            })
         }
     }
-    return results;
+    return {
+        id: product.id,
+        ean: product.ean,
+        name: product.name,
+        brand: product.brand,
+        image_url: product.image_url,
+        quantity_value: product.quantity_value,
+        quantity_unit: product.quantity_unit,
+        standard_quantity_unit: product.standard_quantity_unit,
+        categories: [],
+        stores: productStores
+
+    }
+}
+
+export function findProductByEAN(ean: string, pricesLimit: number = 50):ProductWithMetadata | undefined {
+    const product:ProductInterface | undefined = getProductByEan.get(ean);
+    if (!product) {
+        return undefined;
+    }
+    return getProductMetadata(product, pricesLimit);
+}
+
+function buildSearchResultsJSON(products: ProductInterface[], numResults: number, pricesLimit: number = 50):ProductSearchResult | undefined {
+    const results: ProductWithMetadata[] = [];
+    for (const product of products) {
+        results.push(getProductMetadata(product, pricesLimit));
+    }
+    const response: ProductSearchResult = {
+        nResults: numResults,
+        nbResults: countProducts.get(),
+        results: results
+    }
+    return response;
 }

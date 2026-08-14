@@ -29,7 +29,7 @@ async function search() {
       </div>
 
       <div
-          v-for="item in results"
+          v-for="item in results.results"
           :key="item.id"
           class="result-item"
       >
