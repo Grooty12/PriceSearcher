@@ -4,24 +4,32 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 import {Netto} from "./Stores/netto.ts"
 import {Fotex} from './Stores/fotex.ts'
+import {Meny} from "./Stores/meny.ts";
 
 import {
     getProductByEan,
-    getProductPriceById,
+    searchProductsByName,
     type ProductInterface,
     type Price,
-    getProductByName
 } from './Data/database.ts'
 
 const firstRun = false;
+const updatePrice = false;
 const netto = new Netto();
 const fotex = new Fotex();
+const meny = new Meny();
 
 if (firstRun) {
     await netto.addProductsToDB()
     console.log("Added Netto products")
     await fotex.addProductsToDB()
     console.log("Added Føtex products")
+}
+if (updatePrice) {
+    await netto.updateProductPrices();
+    console.log("Updated Netto Price")
+    await fotex.updateProductPrices();
+    console.log("Updated Føtex Price")
 }
 
 const app = express();
@@ -37,10 +45,9 @@ app.get('/api/products/:ean', (req: SearchRequest, res: Response<ProductInterfac
     res.json(product);
 });
 
-app.get('/api/prices/:ean', (req: SearchRequest, res: Response<Price>) => {
-    const product = getProductByEan.get(req.params.ean);
-    const price = getProductPriceById.get(product.id);
-    res.json(price);
-});
+app.get('/api/productsName/:name', (req: SearchRequestName, res: Response<ProductInterface[]>) => {
+    const products = searchProductsByName(req.params.name);
+    res.json(products)
+})
 
 app.listen(3001, () => console.log('API running on http://localhost:3001'));

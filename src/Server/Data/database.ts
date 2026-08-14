@@ -84,6 +84,8 @@ export interface Price {
       'INSERT OR IGNORE INTO stores (name) VALUES (?)'
   );
 
+  const getStoreByName = db.prepare<string, {id: number}>('SELECT id FROM stores where name = ?');
+
   const insertCategory = db.prepare<string, { lastInsertRowid: number }>(
       'INSERT OR IGNORE INTO categories (name) VALUES (?)'
   );
@@ -110,7 +112,15 @@ const insertProductCategory = db.prepare(
 // Query statements
 export const getProductByEan = db.prepare<string, ProductInterface>('SELECT * FROM products WHERE ean = ?');
 
-export const getProductPriceById = db.prepare<string, Price>('SELECT * FROM prices WHERE id = ?');
+export const getProductPriceById = db.prepare<[number, number], Price>('SELECT * FROM prices WHERE product_id = ? LIMIT ?');
+
+export const getProductPriceByIdAndStore = db.prepare<[number, number, number], Price>('SELECT * FROM prices WHERE id = ? AND store_id = ? LIMIT ?');
+
+export const getProductsByName = db.prepare<[string, number], ProductInterface>(`
+    SELECT * FROM products
+    WHERE name LIKE '%' || ? || '%'
+    LIMIT ?;
+`);
 
 // Insert helpers
 function getOrCreateStore(name: string): number {
@@ -121,6 +131,14 @@ function getOrCreateStore(name: string): number {
 
   const store = db.prepare<string, Store>('SELECT id FROM Stores WHERE name = ?').get(name);
   return store!.id;
+}
+
+function getStore(name: string): number {
+    const row = getStoreByName.get(name.toLowerCase());
+    if (!row) {
+        throw new Error(`Store not found: ${name}`);
+    }
+    return row.id;
 }
 
 function getOrCreateCategory(name: string): number {
@@ -137,10 +155,6 @@ function logPrice(
 ): void {
   insertPrice.run(productId, storeId, price, pricePerStandardQuantity);
 }
-
-/*function linkProductToCategory(productId: number, categoryId: number): void {
-  insertProductCategory.run(productId, categoryId);
-}*/
 
 export const addProductWithPrice = db.transaction((
     ean: string,
@@ -186,3 +200,32 @@ export const updateProductPrice = db.transaction((
     }
 
 })
+
+export function getProductPrices(productId: number, storeId?: number, limit: number = 1): Price[] | undefined {
+    if (storeId === undefined || storeId === null) {
+        return getProductPriceById.all(productId, limit);
+    } else {
+        return getProductPriceByIdAndStore.all(productId, storeId, limit);
+    }
+}
+
+export function searchProductsByName(name: string, stores?: string[], limit: number = 10) {
+    const products = getProductsByName.all(name, limit);
+    if (stores === undefined || stores.length === 0) {
+        return products;
+    }
+    const results: ProductInterface[] = []
+    const storesArray = stores.map(name => getStore(name));
+    for (const product of products) {
+        for (const store of storesArray) {
+            const latestProductPriceForStore = getProductPrices(product.id, store);
+            if (latestProductPriceForStore === undefined) {
+                continue;
+            } else {
+                results.push(product);
+                break;
+            }
+        }
+    }
+    return results;
+}

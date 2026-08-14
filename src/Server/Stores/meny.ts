@@ -1,14 +1,7 @@
 import axios from "axios";
 import { addProductWithPrice, updateProductPrice } from "../Data/database.ts";
 
-
-export function meny () {
-  const url =
-    'https://longjohnapi-meny.azurewebsites.net/Relewise/search?merchantId=558155&pageNumber=0&pageSize=5000';
-    console.log(url);
-}
-
-export class meny {
+export class Meny {
     url: string | undefined;
     store: string | undefined
     constructor() {

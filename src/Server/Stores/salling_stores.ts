@@ -2,6 +2,8 @@ import axios from 'axios';
 import fs from 'fs';
 import { addProductWithPrice, updateProductPrice } from "../Data/database.ts";
 import {response} from "express";
+import * as dotenv from 'dotenv';
+import * as path from 'path';
 
 interface Header {
   "Accept-Encoding": string,
@@ -182,7 +184,7 @@ export class SallingLib {
   }
 
   async fetchPageJsonResponse (this: any, pageNumber: number): Promise<Response> { // Returns JSON response for a page (1000 products)
-    this.body['requests']['page'] = pageNumber;
+    this.body['requests'][0]['page'] = pageNumber;
     const { data } = await axios.post(
         this.url,
         this.body,
@@ -191,43 +193,56 @@ export class SallingLib {
     return data;
   }
 
-  async getWholeJsonResponse(this: any): Promise<Response> { // Returns all products
-    const products = await this.fetchPageJsonResponse(0);
-    for (let i = 1; i < this.pages; i++) {
-      let data = await this.fetchPageJsonResponse(i);
-      products['results'][0]['hits'].join(data['results'][0]['hits'])
-    }
-    return products;
+    async addProductsToDB(this: any) {
+        for (let i = 0; i < this.pages; i++) {
+            const response = await this.fetchPageJsonResponse(i);
+            const allHits: ProductResult[] = response.results.flatMap((result: { hits: any; }) => result.hits);
+            for (const hit of allHits) {
+                // @ts-ignore
+                if (hit.name == "") {
+                    continue;
+                }
+                const ean = hit?._highlightResult?.gtin?.value ?? "";
+                const name = hit.name;
+                const storeData = Object.values(hit.storeData)
+                let price = storeData[0]['price'] / 1000;
+                const quantity = hit.units;
+                const quantityUnit = hit.unitsOfMeasure;
+                const imageURL = hit.images[0];
+                const brand = hit.brand;
+                const standardUnit = storeData[0].unitsOfMeasurePriceUnit;
+                const priceStandardUnit = storeData[0]['unitsOfMeasureShowPrice'] / 1000;
+                if (storeData[0]['price'] < 1000) {
+                    price = this.convertStandardUnitPriceToNormalPrice(quantity, quantityUnit, priceStandardUnit);
+                }
+                addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, price, priceStandardUnit, [""]); // TODO (DONE): Handle price not always being correct amount of digits (sometimes 3 and other times 4), also handle incorrect unitsOfMeasurePrice. Use unitsOfMeasureShowPrice or unitsOfMeasureOfferPrice
+            }
+        }
   }
 
-    async addProductsToDB() {
-      const response = await this.getWholeJsonResponse();
-      const allHits: ProductResult[] = response.results.flatMap((result: { hits: any; }) => result.hits);
-      for (const hit of allHits) {
-          // @ts-ignore
-          const ean = hit['_highlightResult']['gtin'].value;
-          const name = hit.name;
-          const storeData = Object.values(hit.storeData)
-          const price = storeData[0]['price'] / 1000;
-          const quantity = hit.units;
-          const quantityUnit = hit.unitsOfMeasure;
-          const imageURL = hit.images[0];
-          const brand = hit.brand;
-          const standardUnit = storeData[0].unitsOfMeasurePriceUnit;
-          const priceStandardUnit = storeData[0]['unitsOfMeasurePrice'] / 1000;
-          addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, price, priceStandardUnit, [""]);
+    async updateProductPrices(this: any) {
+        for (let i = 0; i < this.pages; i++) {
+            const response = await this.fetchPageJsonResponse(i);
+            const allHits: ProductResult[] = response.results.flatMap((result: { hits: any; }) => result.hits);
+            for (const hit of allHits) {
+                const ean = hit['_highlightResult']['gtin'].value;
+                const storeData = Object.values(hit.storeData)
+                const price = storeData[0]['price'] / 1000;
+                const standardUnitPrice = storeData[0]['unitsOfMeasureOfferPrice'] / 1000;
+                updateProductPrice(ean, this.store, price, standardUnitPrice)
+            }
+        }
+  }
+
+  convertStandardUnitPriceToNormalPrice(this: any, quantity: number, unit: string, standardUnitPrice: number) {
+      if (unit == "stk" || unit == "kg" || unit == "l" || unit == "m" || unit == "Vaske" || unit == "L.B") {
+          return standardUnitPrice * quantity;
       }
-  }
-
-    async updateProductPrices() {
-      const response = await this.getWholeJsonResponse();
-      const allHits: ProductResult[] = response.results.flatMap((result: { hits: any; }) => result.hits);
-      for (const hit of allHits) {
-          const ean = hit['_highlightResult']['gtin'].value;
-          const storeData = Object.values(hit.storeData)
-          const price = storeData[0]['price'] / 1000;
-          const standardUnitPrice = storeData[0]['unitsOfMeasureOfferPrice'] / 1000;
-          updateProductPrice(ean, this.store, price, standardUnitPrice)
+      if (unit == "g" || unit == "ml" || unit == "mm") {
+          return standardUnitPrice * (quantity / 1000);
+      }
+      if (unit == "cl" || unit == "cm") {
+          return standardUnitPrice * (quantity / 100);
       }
   }
 }
