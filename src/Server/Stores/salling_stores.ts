@@ -1,9 +1,5 @@
 import axios from 'axios';
-import fs from 'fs';
 import { addProductWithPrice, updateProductPrice } from "../Data/database.ts";
-import {response} from "express";
-import * as dotenv from 'dotenv';
-import * as path from 'path';
 
 interface Header {
   "Accept-Encoding": string,
@@ -215,7 +211,7 @@ export class SallingLib {
                 if (storeData[0]['price'] < 1000) {
                     price = this.convertStandardUnitPriceToNormalPrice(quantity, quantityUnit, priceStandardUnit);
                 }
-                addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, price, priceStandardUnit, [""]); // TODO (DONE): Handle price not always being correct amount of digits (sometimes 3 and other times 4), also handle incorrect unitsOfMeasurePrice. Use unitsOfMeasureShowPrice or unitsOfMeasureOfferPrice
+                addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, price, priceStandardUnit, [""]);
             }
         }
   }

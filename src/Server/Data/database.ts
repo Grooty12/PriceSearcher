@@ -204,19 +204,7 @@ function logPrice(
   insertPrice.run(productId, storeId, price, pricePerStandardQuantity);
 }
 
-export const addProductWithPrice = db.transaction((
-    ean: string,
-    name: string,
-    brand: string,
-    imageUrl: string,
-    quantityValue: number,
-    quantityUnit: string,
-    standardUnit: string,
-    storeName: string,
-    price: number,
-    priceStandardUnit: number,
-    categories: string[]
-) => {
+export function addProductWithPrice(ean: string, name: string, brand: string, imageUrl: string, quantityValue: number, quantityUnit: string, standardUnit: string, storeName: string, price: number, priceStandardUnit: number, categories: string[]) {
     insertProduct.run(
         ean, name, brand, imageUrl, quantityValue, quantityUnit, standardUnit
     );
@@ -231,8 +219,7 @@ export const addProductWithPrice = db.transaction((
         insertProductCategory.run(productId, categoryId);
     }
 
-    return productId;
-});
+}
 
 export function updateProductPrice(ean: string, storeName: string, price: number, standardUnitPrice: number) {
     const product = getProductByEan.get(ean);
