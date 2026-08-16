@@ -1,12 +1,18 @@
 import axios from "axios";
-import { addProductWithPrice, updateProductPrice } from "../Data/database.ts";
+import { addProductWithPrice, updateProductPrice, getOrCreateStore } from "../Data/database.ts";
 
 export class Meny {
     url: string | undefined;
     store: string | undefined
+    displayName: string;
+    storeID: number;
+    favicon: string;
     constructor() {
         this.url = "https://longjohnapi-meny.azurewebsites.net/Relewise/search?merchantId=558155&pageNumber=0&pageSize=5000";
         this.store = "meny";
+        this.displayName = "Meny";
+        this.favicon = "https://meny.dk/favicon.ico";
+        this.storeID = getOrCreateStore(this.store, this.displayName, this.favicon);
     }
     async fetchJson(this: any) {
         const { data } = await axios.post(
@@ -15,7 +21,7 @@ export class Meny {
         return data;
     }
 
-    async addProductsWithPrice(this: any) {
+    async addProductsToDB(this: any) {
         const response = await this.fetchJson();
         const products = await response.results.flatMap((result: { products: any; }) => result.products);
         for (const product of products) {
@@ -26,11 +32,11 @@ export class Meny {
             const [standardUnitPrice, standardUnit] = this.calculateStandardUnitPrice(price, quantity, quantityUnit);
             const brand = "" // TODO: Find via OFF
             const imageURL = product.highResImg;
-            addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, price, standardUnitPrice, [""]);
+            addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.storeID, price, standardUnitPrice, [""]);
         }
     }
 
-    async updateProductPrices(this: any) {
+    async updateDBPrices(this: any) {
         const response = await this.fetchJson();
         const products = await response.results.flatMap((result: { products: any; }) => result.products);
         for (const product of products) {
@@ -38,7 +44,7 @@ export class Meny {
             const price = product.price;
             const [quantity, quantityUnit] = this.parseQuantityAndUnit(product.summary)
             const [standardUnitPrice] = this.calculateStandardUnitPrice(price, quantity, quantityUnit);
-            updateProductPrice(ean, "meny", price, standardUnitPrice)
+            updateProductPrice(ean, this.storeID, price, standardUnitPrice)
         }
     }
 

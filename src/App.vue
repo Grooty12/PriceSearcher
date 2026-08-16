@@ -1,25 +1,17 @@
-<script setup>
-import { ref, computed } from 'vue'
+<script setup lang="ts">
+import { useProductSearch } from './components/useProductSearch.ts'
 
-const results = ref([])
-const searchQuery = ref('')
-
-
-async function search() {
-  const res = await fetch(`http://localhost:3001/api/ProductsName/${searchQuery.value}`)
-  results.value = await res.json()
-}
+const { query, results, isLoading, error } = useProductSearch()
 
 </script>
 
 <template>
-  <div class="search-container">
+  <div class="search">
     <input
-        v-model="searchQuery"
+        v-model="query"
         type="text"
         placeholder="Search for groceries..."
         class="search-bar"
-        @keyup.enter="search"
     />
 
 
@@ -33,17 +25,29 @@ async function search() {
           :key="item.id"
           class="result-item"
       >
-        <span class="item-name">{{ item.name }}</span>
-        <span class="item-brand">{{ item.brand }}</span>
-        <span class="item-quantity">{{ item.quantity_value + " " + item.quantity_unit}}</span>
+        <img class="item-image" :src=item.image_url alt="">
+        <div class="item-name-and-brand">
+          <span class="item-name">{{ item.name }}</span>
+          <span class="item-brand">{{ item.brand }}</span>
+        </div>
+        <div class="item-quantity-and-standard-price">
+          <span class="item-quantity">{{ item.quantity_value + " " + item.quantity_unit}}</span>
+          <span class="item-standard-price">{{item.cheapest_price_standard_quantity + " DKK / " + item.standard_quantity_unit}}</span> <!-- TODO: Maybe not hard-code DKK currency -->
+        </div>
+        <div class="item-cheapest-price-and-store">
+          <span class="item-cheapest-price">{{item.cheapest_price + " DKK"}}</span>
+          <span class="item-cheapest-store"><img class="store-image" :src=item.cheapest_price_store_favicon :alt=item.cheapest_price_store_name>{{item.cheapest_price_store_name}}</span>
+        </div>
+
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.search-container {
-  max-width: 500px;
+
+.search {
+  max-width: 700px;
   margin: 2rem auto;
   font-family: sans-serif;
 }
@@ -68,9 +72,22 @@ async function search() {
   border-bottom: 1px solid #eee;
 }
 
+.item-image {
+  width: 5rem;
+  height: 5rem;
+  object-fit: contain;
+  padding: 0.5rem;
+}
+.item-name-and-brand {
+  display: flex;
+  flex-direction: column;
+  width: 20%;
+
+}
 .item-name {
   font-weight: bold;
   flex: 1;
+  text-align: center;
 }
 
 .item-brand {
@@ -80,10 +97,44 @@ async function search() {
 }
 
 .item-quantity {
-  color: #2c7a2c;
   font-weight: bold;
   flex: 0.5;
   text-align: right;
+}
+
+.item-standard-price {
+  font-weight: bold;
+  flex: 0.5;
+  text-align: right;
+}
+
+.item-quantity-and-standard-price {
+  display: flex;
+  flex-direction: column;
+}
+
+.item-cheapest-price {
+  font-weight: bold;
+  flex: 0.5;
+  text-align: right;
+}
+
+.item-cheapest-store {
+  font-weight: bold;
+  flex: 0.5;
+  text-align: right;
+  padding: 0.2rem;
+}
+
+.item-cheapest-price-and-store {
+  display: flex;
+  flex-direction: column;
+}
+
+.store-image {
+  width: 1.0rem;
+  height: 1.0rem;
+  padding: 0.2rem;
 }
 
 .no-results {

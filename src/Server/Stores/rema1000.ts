@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { addProductWithPrice, updateProductPrice } from "../Data/database.ts";
+import { addProductWithPrice, updateProductPrice, getOrCreateStore} from "../Data/database.ts";
 
 interface ResponseData {
     "id": number,
@@ -88,22 +88,27 @@ export class Rema1000 {
     url:string;
     pages: number;
     store:string;
+    storeID: number;
+    favicon: string;
+    displayName: string;
     constructor() {
         this.url = "https://api.digital.rema1000.dk/api/search/products?query=&per_page=1000&page="
         this.pages = 4;
         this.store = "rema1000";
+        this.favicon = "https://rema1000.dk/favicon.ico";
+        this.displayName = "Rema100";
+        this.storeID = getOrCreateStore("rema1000", "Rema1000", this.favicon);
     }
 
     async fetchPageJsonResponse (this: any, pageNumber: number): Promise<Response> { // Returns JSON response for a page (1000 products)
-        this.body['requests'][0]['page'] = pageNumber;
-        const { data } = await axios.post(
+        const { data } = await axios.get(
             this.url+pageNumber
         )
         return data;
     }
-    async addProductsWithPrice(this: any) {
+    async addProductsToDB(this: any) {
         for (let i = 1; i <= this.pages; i++) {
-            const response = this.fetchPageJsonResponse(i);
+            const response = await this.fetchPageJsonResponse(i);
             for (const result of response.data) {
                 const name = result.name;
                 const ean = result.barcodes[0];
@@ -111,19 +116,22 @@ export class Rema1000 {
                 const standardUnit = this.standardizeUnit(result.prices[0].compare_unit);
                 const standardUnitPrice = result.prices[0].compare_unit_price;
                 const [quantity, quantityUnit, brand] = this.getQuantityAndBrand(result.underline)
-                const imageURL = result.images[0].large
-                addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, "rema1000", price, standardUnitPrice, [""]);
+                let imageURL: string = "";
+                if (result.images[0] !== undefined) {
+                    imageURL = result.images[0].large
+                }
+                addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.storeID, price, standardUnitPrice, [""]);
             }
         }
     }
-    async updateProductPrices(this: any) {
+    async updateDBPrices(this: any) {
         for (let i = 1; i <= this.pages; i++) {
             const response = this.fetchPageJsonResponse(i);
             for (const result of response.data) {
                 const ean = result.barcodes[0];
                 const price = result.prices[0].price;
                 const standardUnitPrice = result.prices[0].compare_unit_price;
-                updateProductPrice(ean, "rema1000", price, standardUnitPrice);
+                updateProductPrice(ean, this.storeID, price, standardUnitPrice);
             }
         }
     }
@@ -131,22 +139,22 @@ export class Rema1000 {
     getQuantityAndBrand(this: any, quantityAndBrand: string): [number, string, string] {
         const [quantityWithUnit, brand] = quantityAndBrand.split(" / ")
         const [quantity, unit] = quantityWithUnit.split(" ");
-        return [quantity as number, this.standardizeUnit(unit.toLowerCase().replaceAll("'","")), brand]
+        return [quantity as number, this.standardizeUnit(unit.toLowerCase().replaceAll(".","")), brand]
     }
 
     standardizeUnit(unit: string) {
         if (["", "kg", "ml", "sæt", "stk", "rl", "par", "cl"].includes(unit)) {
             return unit;
         }
-        if (unit == "ltr") {
-            return "l"
+        if (unit === "ltr") {
+            return "l";
         }
-        if (unit == "mtr") {
-            return "m"
+        if (unit === "mtr") {
+            return "m";
         }
-        if (unit == "gr") {
+        if (unit === "gr") {
             return "g";
         }
-        return ""
+        return unit;
     }
 }

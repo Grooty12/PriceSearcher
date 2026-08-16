@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { addProductWithPrice, updateProductPrice } from "../Data/database.ts";
+import {addProductWithPrice, getOrCreateStore, updateProductPrice} from "../Data/database.ts";
 
 interface Header {
   "Accept-Encoding": string,
@@ -131,8 +131,10 @@ export class SallingLib {
   store = "salling";
   apiKey: string = "0";
   apiStore: string = "SALLING";
-
-  constructor(store: string, pageNR: number) {
+  storeID: number;
+  displayName: string;
+  favicon: string;
+  constructor(store: string, pageNR: number, displayName: string) {
     this.url = "https://f9vbjlr1bk-dsn.algolia.net/1/indexes/*/queries";
     this.apiKey = process.env[`${store.toUpperCase()}_API_KEY`];
     this.pages = pageNR;
@@ -177,6 +179,9 @@ export class SallingLib {
         },
       ],
     }
+    this.favicon = `https://${store == "fotex" ? "foetex" : store.toLowerCase()}.com/favicon.ico`;
+    this.displayName = displayName;
+    this.storeID = getOrCreateStore(this.store, this.displayName, this.favicon);
   }
 
   async fetchPageJsonResponse (this: any, pageNumber: number): Promise<Response> { // Returns JSON response for a page (1000 products)
@@ -201,31 +206,28 @@ export class SallingLib {
                 const ean = hit?._highlightResult?.gtin?.value ?? "";
                 const name = hit.name;
                 const storeData = Object.values(hit.storeData)
-                let price = storeData[0]['price'] / 1000;
+                let price = storeData[0]['price'] / 100;
                 const quantity = hit.units;
                 const quantityUnit = hit.unitsOfMeasure;
                 const imageURL = hit.images[0];
                 const brand = hit.brand;
                 const standardUnit = storeData[0].unitsOfMeasurePriceUnit;
-                const priceStandardUnit = storeData[0]['unitsOfMeasureShowPrice'] / 1000;
-                if (storeData[0]['price'] < 1000) {
-                    price = this.convertStandardUnitPriceToNormalPrice(quantity, quantityUnit, priceStandardUnit);
-                }
-                addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.store, price, priceStandardUnit, [""]);
+                const priceStandardUnit = storeData[0]['unitsOfMeasureShowPrice'] / 100;
+                addProductWithPrice(ean, name, brand, imageURL, quantity, quantityUnit, standardUnit, this.storeID, price, priceStandardUnit, [""]);
             }
         }
   }
 
-    async updateProductPrices(this: any) {
+    async updateDBPrices(this: any) {
         for (let i = 0; i < this.pages; i++) {
             const response = await this.fetchPageJsonResponse(i);
             const allHits: ProductResult[] = response.results.flatMap((result: { hits: any; }) => result.hits);
             for (const hit of allHits) {
                 const ean = hit['_highlightResult']['gtin'].value;
                 const storeData = Object.values(hit.storeData)
-                const price = storeData[0]['price'] / 1000;
-                const standardUnitPrice = storeData[0]['unitsOfMeasureOfferPrice'] / 1000;
-                updateProductPrice(ean, this.store, price, standardUnitPrice)
+                const price = storeData[0]['price'] / 100;
+                const standardUnitPrice = storeData[0]['unitsOfMeasureOfferPrice'] / 100;
+                updateProductPrice(ean, this.storeID, price, standardUnitPrice)
             }
         }
   }
