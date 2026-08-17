@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { addProductWithPrice, updateProductPrice, getOrCreateStore} from "../Data/database.ts";
+import { addProductWithPrice, updateProductPrice, getOrCreateStore, findProductByEAN } from "../Data/database.ts";
 
 interface ResponseData {
     "id": number,
@@ -111,7 +111,7 @@ export class Rema1000 {
             const response = await this.fetchPageJsonResponse(i);
             for (const result of response.data) {
                 const name = result.name;
-                const ean = result.barcodes[0];
+                const ean = this.findCorrectBarcode(result.barcodes);
                 const price = result.prices[0].price;
                 const standardUnit = this.standardizeUnit(result.prices[0].compare_unit);
                 const standardUnitPrice = result.prices[0].compare_unit_price;
@@ -128,7 +128,7 @@ export class Rema1000 {
         for (let i = 1; i <= this.pages; i++) {
             const response = this.fetchPageJsonResponse(i);
             for (const result of response.data) {
-                const ean = result.barcodes[0];
+                const ean = this.findCorrectBarcode(result.barcodes);
                 const price = result.prices[0].price;
                 const standardUnitPrice = result.prices[0].compare_unit_price;
                 updateProductPrice(ean, this.storeID, price, standardUnitPrice);
@@ -156,5 +156,14 @@ export class Rema1000 {
             return "g";
         }
         return unit;
+    }
+
+    findCorrectBarcode(this:any, barcodes: string[]): string | undefined {
+        for (const barcode of barcodes) {
+            if (findProductByEAN(barcode) !== undefined) {
+                return barcode;
+            }
+        }
+        return undefined;
     }
 }

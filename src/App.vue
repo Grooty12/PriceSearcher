@@ -1,7 +1,69 @@
 <script setup lang="ts">
 import { useProductSearch } from './components/useProductSearch.ts'
+import { ref, computed, onMounted, onUnmounted  } from 'vue'
+import type {ProductSearchResult, Store} from "./Server/Data/searchResultInterfaces.ts";
 
 const { query, results, isLoading, error } = useProductSearch()
+
+interface DropDownOptions {
+  label: string;
+  value: string;
+}
+
+const props = defineProps<{
+  options: DropDownOptions[]
+  modelValue: string | null
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: string]
+}>()
+
+const isOpen = ref(false)
+const dropdownRef = ref<HTMLElement | null>(null)
+
+const selectedLabel = computed(() => {
+  const match = props.options.find(o => o.value === props.modelValue)
+  return match ? match.label : 'Select…'
+})
+
+function selectOption(option: DropDownOptions) {
+  emit('update:modelValue', option.value)
+  isOpen.value = false
+}
+
+function handleClickOutside(event: MouseEvent) {
+  if (dropdownRef.value && !dropdownRef.value.contains(event.target as Node)) {
+    isOpen.value = false
+  }
+}
+
+onMounted(() => document.addEventListener('click', handleClickOutside))
+onUnmounted(() => document.removeEventListener('click', handleClickOutside))
+
+function sortOtherStores(item) {
+  const otherStores = [];
+  for (const store of item.stores) {
+    if (store.display_name !== item.cheapest_price_store_name) {
+      otherStores.push(store);
+    }
+  }
+  return otherStores
+}
+
+defineProps<{
+  searchResults: ProductSearchResult[]
+}>()
+
+const selectedResult = ref<ProductSearchResult | null>(null)
+
+function openOverlay(result: ProductSearchResult) {
+  selectedResult.value = result
+}
+
+function closeOverlay() {
+  selectedResult.value = null
+}
 
 </script>
 
@@ -24,6 +86,7 @@ const { query, results, isLoading, error } = useProductSearch()
           v-for="item in results.results"
           :key="item.id"
           class="result-item"
+          @click="openOverlay(item)"
       >
         <img class="item-image" :src=item.image_url alt="">
         <div class="item-name-and-brand">
@@ -38,10 +101,29 @@ const { query, results, isLoading, error } = useProductSearch()
           <span class="item-cheapest-price">{{item.cheapest_price + " DKK"}}</span>
           <span class="item-cheapest-store"><img class="store-image" :src=item.cheapest_price_store_favicon :alt=item.cheapest_price_store_name>{{item.cheapest_price_store_name}}</span>
         </div>
-
+        <div class="item-other-stores">
+          <img class="store-image"
+               v-for="store in sortOtherStores(item)"
+               :key="store.id"
+               :src="store.store_favicon"
+               :alt="store.display_name"
+               :title="store.price + ' DKK'"
+          >
       </div>
+        </div>
     </div>
   </div>
+  <!-- Overlay -->
+  <Teleport to="body">
+    <div v-if="selectedResult" class="overlay-backdrop" @click="closeOverlay">
+      <div class="overlay-content" @click.stop>
+        <button class="close-btn" @click="closeOverlay">×</button>
+        <img class="overlay-image" :src="selectedResult.image_url" :alt="selectedResult.name">
+        <h2>{{ selectedResult.name }}</h2>
+        <!-- whatever detail content you want -->
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -69,7 +151,14 @@ const { query, results, isLoading, error } = useProductSearch()
   display: flex;
   justify-content: space-between;
   padding: 0.75rem;
+  background-color: #ffffff;
   border-bottom: 1px solid #eee;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.result-item:hover {
+  background-color: #eee;
 }
 
 .item-image {
@@ -132,9 +221,15 @@ const { query, results, isLoading, error } = useProductSearch()
 }
 
 .store-image {
-  width: 1.0rem;
-  height: 1.0rem;
-  padding: 0.2rem;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0.5rem;
+}
+
+.item-other-stores {
+  display: flex;
+  flex-direction: column; /* vertical stack; use row for horizontal */
+  align-items: center;
 }
 
 .no-results {
@@ -142,4 +237,54 @@ const { query, results, isLoading, error } = useProductSearch()
   color: #888;
   text-align: center;
 }
+
+
+.overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.overlay-content {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 500px;
+  width: 90%;
+  position: relative;
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+.close-btn:hover {
+  background-color: #eee;
+  border-radius: 100%;
+}
+
+.overlay-image {
+  width: 10rem;
+  height: 10rem;
+  object-fit: contain;
+  padding: 0.5rem;
+}
+
 </style>

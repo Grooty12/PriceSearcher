@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
 const db = new Database('prices')
 
+import type { ProductSearchResult, ProductWithMetadata, Store, ProductSearchResultStores, ProductSearchResultPrices } from "./searchResultInterfaces.ts";
+
 db.exec(`
     CREATE TABLE IF NOT EXISTS products (
                                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,55 +62,6 @@ db.exec(`
     created_at: string;
   }
 
-  interface ProductSearchResultPrices {
-      date: string;
-      price: number;
-      price_standard_unit: number;
-      currency: string;
-  }
-
-  interface ProductSearchResultStores {
-      id: number;
-      name: string;
-      store_favicon: string;
-      display_name: string;
-      price: number;
-      price_standard_unit: number;
-      price_history: ProductSearchResultPrices[];
-  }
-
-  export interface ProductWithMetadata {
-      id: number;
-      ean: string;
-      name: string;
-      brand?: string;
-      image_url?: string;
-      quantity_value?: number;
-      quantity_unit?: string;
-      standard_quantity_unit?: string;
-      categories: string[];
-      cheapest_price: number;
-      cheapest_price_standard_quantity: number;
-      cheapest_price_store_id: number;
-      cheapest_price_store_name: string;
-      cheapest_price_store_favicon: string;
-      stores: ProductSearchResultStores[];
-  }
-
-  export interface ProductSearchResult {
-      nResults: number;
-      nbResults: number;
-      results: ProductWithMetadata[];
-      errorMessage?: string;
-  }
-
-  export interface Store {
-    id: number;
-    name: string;
-    display_name: string;
-    favicon_url: string;
-  }
-
   interface Category {
     id: number;
     name: string;
@@ -139,11 +92,14 @@ export interface Price {
 
 
   const insertProduct = db.prepare(`
-    INSERT INTO products (ean, name, brand, image_url, quantity_value, quantity_unit, standard_quantity_unit)
+    INSERT OR IGNORE INTO products (ean, name, brand, image_url, quantity_value, quantity_unit, standard_quantity_unit)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(ean) DO UPDATE SET
-        brand = CASE WHEN brand = '' THEN excluded.brand ELSE brand END
+
 `);
+//         ON CONFLICT(ean) DO UPDATE SET
+//             name = excluded.name,
+//             brand = excluded.brand,
+//             quantity_unit = CASE WHEN quantity_unit = '' THEN excluded.quantity_unit ELSE quantity_unit END
 
 const insertPrice = db.prepare(`
     INSERT INTO prices (product_id, store_id, price, price_per_standard_quantity)
@@ -231,7 +187,7 @@ function logPrice(
 
 export function addProductWithPrice(ean: string, name: string, brand: string, imageUrl: string, quantityValue: number, quantityUnit: string, standardUnit: string, storeId: number, price: number, priceStandardUnit: number, categories: string[]) {
     insertProduct.run(
-        ean, name, brand, imageUrl, quantityValue, quantityUnit, standardUnit
+        ean, name.toLowerCase(), brand !== undefined ? brand.toLowerCase() : brand, imageUrl, quantityValue, quantityUnit, standardUnit
     );
     const product = getProductByEan.get(ean);
     if (!product) throw new Error('Product upsert failed');
@@ -257,7 +213,7 @@ export function updateProductPrice(ean: string, storeId: number, price: number, 
 }
 
 export function searchProductsByName(name: string, limit: number = 10, pricesLimit: number = 50):ProductSearchResult | undefined {
-    const products = getProductsByName.all(name, limit);
+    const products = getProductsByName.all(name.toLowerCase(), limit);
     return buildSearchResultsJSON(products, pricesLimit);
 }
 

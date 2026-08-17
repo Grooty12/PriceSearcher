@@ -22,7 +22,6 @@ const netto = new Netto();
 const fotex = new Fotex();
 const meny = new Meny();
 const rema1000 = new Rema1000();
-
 if (firstRun) {
     await rema1000.addProductsToDB();
     console.log("Added Rema1000 products")
@@ -30,8 +29,8 @@ if (firstRun) {
     console.log("Added Netto products")
     await fotex.addProductsToDB()
     console.log("Added Føtex products")
-    //await meny.addProductsToDB()
-    //console.log("Added Meny products")
+    await meny.addProductsToDB()
+    console.log("Added Meny products")
 }
 if (updatePrice) {
     await netto.updateDBPrices();
@@ -56,6 +55,7 @@ interface SearchRequestName {
 // Get product by EAN
 app.get('/api/products/byEan/:ean', (req: SearchRequest, res: Response<ProductWithMetadata>) => {
     const product = findProductByEAN(req.params.ean);
+    console.log(product);
     res.json(product);
 });
 
